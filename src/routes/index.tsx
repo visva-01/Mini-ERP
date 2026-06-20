@@ -1,6 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ErpLayout, HudPanel, PageHeader, StatusBadge } from "@/components/erp-layout";
 import { useERP } from "@/lib/erp-store";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  CartesianGrid,
+  Legend,
+} from "recharts";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Dashboard — Shiv ERP" }] }),
@@ -23,6 +35,25 @@ function Dashboard() {
   const mos = useERP((s) => s.mos);
   const products = useERP((s) => s.products);
   const audit = useERP((s) => s.audit);
+  const stockMoves = useERP((s) => s.stockMoves);
+
+  const productStockData = products.map((p) => ({
+    name: p.name,
+    "On Hand": p.onHand,
+    Reserved: p.reserved,
+  }));
+
+  const movesData = stockMoves
+    .slice(0, 10)
+    .reverse()
+    .map((m) => {
+      const p = products.find((x) => x.id === m.productId);
+      return {
+        time: new Date(m.date).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+        "Quantity Delta": m.quantity,
+        Product: p ? p.name : "SKU",
+      };
+    });
 
   const pendingDeliv = sales.filter((s) => s.status === "confirmed" || s.status === "partial").length;
   const partialReceipts = purchases.filter((p) => p.status === "partial" || p.status === "confirmed").length;
@@ -119,6 +150,58 @@ function Dashboard() {
             </div>
           ))}
           {mos.length === 0 && <div className="text-muted-foreground text-xs">No orders.</div>}
+        </HudPanel>
+      </div>
+
+      {/* Visual Telemetry Charts */}
+      <div className="grid lg:grid-cols-2 gap-4 mt-4">
+        <HudPanel>
+          <div className="hud-label mb-3">// SKU Stock Levels (On Hand vs Reserved)</div>
+          <div className="h-64 w-full text-xs mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={productStockData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.2} />
+                <XAxis dataKey="name" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--card)",
+                    borderColor: "var(--border)",
+                    color: "var(--foreground)",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "10px", marginTop: "5px" }} />
+                <Bar dataKey="On Hand" fill="var(--hud-cyan)" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="Reserved" fill="var(--hud-amber)" radius={[2, 2, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </HudPanel>
+
+        <HudPanel>
+          <div className="hud-label mb-3">// Stock Ledger delta timeline (Last 10 Moves)</div>
+          <div className="h-64 w-full text-xs mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={movesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.2} />
+                <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={10} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--card)",
+                    borderColor: "var(--border)",
+                    color: "var(--foreground)",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: "10px", marginTop: "5px" }} />
+                <Line type="monotone" dataKey="Quantity Delta" stroke="var(--hud-magenta)" activeDot={{ r: 6 }} strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </HudPanel>
       </div>
     </ErpLayout>

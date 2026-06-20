@@ -115,3 +115,170 @@
     color: var(--muted-foreground);
   }
 }
+
+/* Minimal Theme overrides */
+body.minimal {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  background-image: none !important;
+  background-color: oklch(0.12 0.01 240) !important; /* Solid sleek dark gray slate */
+}
+
+body.minimal .hud-panel {
+  background: oklch(0.15 0.01 240) !important;
+  border: 1px solid oklch(0.24 0.02 240) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  border-radius: 8px !important;
+}
+
+body.minimal .hud-panel::before,
+body.minimal .hud-panel::after {
+  display: none !important;
+}
+
+body.minimal .hud-text-glow {
+  text-shadow: none !important;
+}
+
+body.minimal .hud-scanlines {
+  background-image: none !important;
+}
+
+body.minimal .hud-label {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.08em !important;
+  color: oklch(0.55 0.02 240) !important;
+}
+
+body.minimal aside {
+  background-color: oklch(0.08 0.01 240) !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+body.minimal aside button, body.minimal aside a, body.minimal .hud-panel button {
+  border-radius: 4px !important;
+}
+
+body.minimal input, body.minimal select, body.minimal textarea {
+  border-radius: 4px !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+body.minimal {
+  --hud-cyan: oklch(0.68 0.12 240) !important; /* Steel blue */
+  --hud-magenta: oklch(0.65 0.12 320) !important; /* Deep clean purple */
+  --hud-amber: oklch(0.72 0.11 75) !important; /* Muted gold */
+  --hud-green: oklch(0.72 0.12 140) !important; /* Muted emerald */
+  --hud-red: oklch(0.6 0.14 25) !important; /* Muted red */
+  --border: oklch(0.24 0.02 240) !important;
+  --background: oklch(0.12 0.01 240) !important;
+}
+
+/* Light Mode overrides */
+body.light {
+  color-scheme: light !important;
+  --background: oklch(0.98 0.005 240) !important;
+  --foreground: oklch(0.18 0.015 240) !important;
+  --card: oklch(1 0 0) !important;
+  --card-foreground: oklch(0.18 0.015 240) !important;
+  --popover: oklch(1 0 0) !important;
+  --popover-foreground: oklch(0.18 0.015 240) !important;
+  --primary: oklch(0.55 0.15 240) !important;
+  --primary-foreground: oklch(0.98 0.005 240) !important;
+  --secondary: oklch(0.95 0.01 240) !important;
+  --secondary-foreground: oklch(0.18 0.015 240) !important;
+  --muted: oklch(0.94 0.005 240) !important;
+  --muted-foreground: oklch(0.45 0.015 240) !important;
+  --accent: oklch(0.92 0.01 240) !important;
+  --accent-foreground: oklch(0.18 0.015 240) !important;
+  --border: oklch(0.85 0.01 240) !important;
+  --input: oklch(0.97 0.005 240) !important;
+  --ring: oklch(0.55 0.15 240) !important;
+
+  --hud-cyan: oklch(0.52 0.14 240) !important; /* Premium corporate blue */
+  --hud-magenta: oklch(0.50 0.18 320) !important; /* Warm purple */
+  --hud-amber: oklch(0.55 0.14 75) !important; /* Dark amber gold */
+  --hud-green: oklch(0.50 0.16 140) !important; /* Forest emerald */
+  --hud-red: oklch(0.50 0.18 25) !important; /* Crimson */
+  --hud-grid: oklch(0.20 0.01 240 / 0.03) !important;
+}
+
+body.light {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+  background-image: none !important;
+}
+
+body.light.hud {
+  background-image:
+    linear-gradient(var(--hud-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px),
+    radial-gradient(circle at 20% 0%, oklch(0.90 0.03 200 / 0.3), transparent 50%),
+    radial-gradient(circle at 90% 100%, oklch(0.90 0.03 320 / 0.25), transparent 50%) !important;
+  background-size: 40px 40px, 40px 40px, 100% 100%, 100% 100% !important;
+}
+
+body.light .hud-panel {
+  background: oklch(1 0 0) !important;
+  border: 1px solid oklch(0.86 0.01 240) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.light.hud .hud-panel::before,
+body.light.hud .hud-panel::after {
+  border-color: var(--hud-cyan) !important;
+}
+
+body.light aside {
+  background-color: oklch(0.96 0.005 240) !important;
+  border-right: 1px solid oklch(0.85 0.01 240) !important;
+}
+
+body.light aside a {
+  border-left-color: transparent !important;
+}
+
+body.light aside a.text-\[color\:var\(--hud-cyan\)\] {
+  border-left-color: var(--hud-cyan) !important;
+}
+
+body.light input, body.light select, body.light textarea {
+  background-color: oklch(1 0 0 / 0.8) !important;
+  border-color: oklch(0.82 0.01 240) !important;
+  color: oklch(0.18 0.015 240) !important;
+}
+
+body.light input:focus, body.light select:focus, body.light textarea:focus {
+  border-color: var(--hud-cyan) !important;
+}
+
+body.light table thead {
+  background-color: oklch(0.95 0.005 240) !important;
+}
+
+body.light table tr {
+  border-bottom-color: oklch(0.90 0.01 240) !important;
+}
+
+body.light table tr:hover {
+  background-color: oklch(0.95 0.005 240 / 0.5) !important;
+}
+
+body.light .text-muted-foreground {
+  color: oklch(0.50 0.01 240) !important;
+}
+
+body.light .border-border\/60 {
+  border-color: oklch(0.90 0.01 240) !important;
+}
+
+body.light .border-border\/40 {
+  border-color: oklch(0.92 0.01 240) !important;
+}
+
+body.light .hud-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg, transparent 0 2px, oklch(0 0 0 / 0.006) 2px 3px
+  ) !important;
+}

@@ -2,6 +2,12 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { initializeDatabase } from "./lib/db-init";
+
+// Trigger database check and seed sample data on boot
+initializeDatabase().catch((err) => {
+  console.error("Unexpected error during database initialization:", err);
+});
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;

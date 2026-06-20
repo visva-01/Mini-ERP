@@ -14,6 +14,7 @@ import { Route as SalesRouteImport } from './routes/sales'
 import { Route as PurchaseRouteImport } from './routes/purchase'
 import { Route as ProductsRouteImport } from './routes/products'
 import { Route as ManufacturingRouteImport } from './routes/manufacturing'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as BomRouteImport } from './routes/bom'
 import { Route as AuditRouteImport } from './routes/audit'
 import { Route as IndexRouteImport } from './routes/index'
@@ -43,6 +44,11 @@ const ManufacturingRoute = ManufacturingRouteImport.update({
   path: '/manufacturing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BomRoute = BomRouteImport.update({
   id: '/bom',
   path: '/bom',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/bom': typeof BomRoute
+  '/login': typeof LoginRoute
   '/manufacturing': typeof ManufacturingRoute
   '/products': typeof ProductsRoute
   '/purchase': typeof PurchaseRoute
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/bom': typeof BomRoute
+  '/login': typeof LoginRoute
   '/manufacturing': typeof ManufacturingRoute
   '/products': typeof ProductsRoute
   '/purchase': typeof PurchaseRoute
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/audit': typeof AuditRoute
   '/bom': typeof BomRoute
+  '/login': typeof LoginRoute
   '/manufacturing': typeof ManufacturingRoute
   '/products': typeof ProductsRoute
   '/purchase': typeof PurchaseRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/bom'
+    | '/login'
     | '/manufacturing'
     | '/products'
     | '/purchase'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/bom'
+    | '/login'
     | '/manufacturing'
     | '/products'
     | '/purchase'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/'
     | '/audit'
     | '/bom'
+    | '/login'
     | '/manufacturing'
     | '/products'
     | '/purchase'
@@ -127,6 +139,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuditRoute: typeof AuditRoute
   BomRoute: typeof BomRoute
+  LoginRoute: typeof LoginRoute
   ManufacturingRoute: typeof ManufacturingRoute
   ProductsRoute: typeof ProductsRoute
   PurchaseRoute: typeof PurchaseRoute
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManufacturingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bom': {
       id: '/bom'
       path: '/bom'
@@ -199,6 +219,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditRoute: AuditRoute,
   BomRoute: BomRoute,
+  LoginRoute: LoginRoute,
   ManufacturingRoute: ManufacturingRoute,
   ProductsRoute: ProductsRoute,
   PurchaseRoute: PurchaseRoute,
@@ -208,3 +229,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

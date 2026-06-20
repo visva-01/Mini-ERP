@@ -6,11 +6,13 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  redirect,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { getCurrentUser, type User } from "../lib/auth-server";
 
 function NotFoundComponent() {
   return (
@@ -53,7 +55,26 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  user?: User | null;
+}>()({
+  beforeLoad: async ({ location }) => {
+    const user = await getCurrentUser();
+    const isLoginPath = location.pathname === "/login";
+
+    // Unauthenticated users are redirected to login
+    if (!user && !isLoginPath) {
+      throw redirect({ to: "/login" });
+    }
+
+    // Authenticated users are redirected away from login to dashboard
+    if (user && isLoginPath) {
+      throw redirect({ to: "/" });
+    }
+
+    return { user };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -74,6 +95,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+import { useERP } from "../lib/erp-store";
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -85,6 +108,17 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const theme = useERP((s) => s.theme);
+  const lightMode = useERP((s) => s.lightMode);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const themeClass = theme || "hud";
+      const modeClass = lightMode ? "light" : "dark";
+      document.body.className = `${themeClass} ${modeClass}`;
+    }
+  }, [theme, lightMode]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />

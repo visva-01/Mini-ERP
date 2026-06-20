@@ -1,7 +1,8 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useRouteContext, useRouter } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useERP } from "@/lib/erp-store";
+import { logoutUser } from "@/lib/auth-server";
 
 const NAV = [
   { to: "/", label: "Dashboard", code: "00" },
@@ -15,11 +16,17 @@ const NAV = [
 ];
 
 export function ErpLayout({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const seed = useERP((s) => s.seedDemo);
   const reset = useERP((s) => s.reset);
-  const productCount = useERP((s) => s.products.length);
+  const theme = useERP((s) => s.theme);
+  const toggleTheme = useERP((s) => s.toggleTheme);
+  const lightMode = useERP((s) => s.lightMode);
+  const toggleLightMode = useERP((s) => s.toggleLightMode);
+  const initializeERPState = useERP((s) => s.initializeERPState);
   const [time, setTime] = useState("");
+  const context = useRouteContext({ strict: false }) as any;
+  const user = context?.user;
 
   useEffect(() => {
     const t = () => setTime(new Date().toLocaleTimeString("en-GB"));
@@ -28,9 +35,35 @@ export function ErpLayout({ children }: { children: ReactNode }) {
     return () => clearInterval(i);
   }, []);
 
+  const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => {
-    if (productCount === 0) seed();
-  }, [productCount, seed]);
+    // Wait for Zustand persisted state to hydrate from localStorage
+    const unsub = useERP.persist.onFinishHydration(() => {
+      setHydrated(true);
+    });
+
+    if (useERP.persist.hasHydrated()) {
+      setHydrated(true);
+    }
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) {
+      initializeERPState();
+    }
+  }, [hydrated, initializeERPState]);
+
+
+  const handleLogout = async () => {
+    if (confirm("Disconnect operational session?")) {
+      await logoutUser();
+      await router.invalidate();
+      window.location.href = "/login";
+    }
+  };
 
   return (
     <div className="min-h-screen flex text-foreground">
@@ -39,6 +72,12 @@ export function ErpLayout({ children }: { children: ReactNode }) {
           <div className="hud-label">SYS // v1.0.0</div>
           <h1 className="text-xl font-bold tracking-widest text-[color:var(--hud-cyan)] hud-text-glow mt-1">SHIV.ERP</h1>
           <div className="text-[10px] text-muted-foreground mt-1">FROM DEMAND → DELIVERY</div>
+          {user && (
+            <div className="mt-3 px-2 py-1.5 border border-[color:var(--hud-cyan)]/20 bg-[color:var(--hud-cyan)]/5 text-[9px] uppercase tracking-wider text-muted-foreground font-mono">
+              OPERATOR // <span className="text-[color:var(--hud-cyan)] font-bold">{user.username}</span>
+              <div className="text-[8px] opacity-75 mt-0.5">ROLE // {user.role}</div>
+            </div>
+          )}
         </div>
         <nav className="flex flex-col gap-0.5">
           {NAV.map((n) => {
@@ -60,12 +99,38 @@ export function ErpLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="mt-auto pt-4 border-t border-border space-y-2">
+          {user && (
+            <button
+              onClick={handleLogout}
+              className="w-full text-[10px] uppercase tracking-widest text-[color:var(--hud-cyan)] hover:text-[color:var(--hud-cyan)]/85 py-1 border border-[color:var(--hud-cyan)]/30 hover:border-[color:var(--hud-cyan)] hover:hud-glow transition-all bg-transparent cursor-pointer"
+            >
+              Disconnect Session
+            </button>
+          )}
           <button
             onClick={() => { if (confirm("Reset all ERP data?")) reset(); }}
-            className="w-full text-[10px] uppercase tracking-widest text-[color:var(--hud-red)]/80 hover:text-[color:var(--hud-red)] py-1 border border-[color:var(--hud-red)]/30 hover:border-[color:var(--hud-red)] transition-colors"
+            className="w-full text-[10px] uppercase tracking-widest text-[color:var(--hud-red)]/80 hover:text-[color:var(--hud-red)] py-1 border border-[color:var(--hud-red)]/30 hover:border-[color:var(--hud-red)] transition-colors cursor-pointer"
           >
             Purge Data
           </button>
+          <div className="hud-label flex justify-between">
+            <span>THEME</span>
+            <button
+              onClick={toggleTheme}
+              className="text-[10px] uppercase tracking-widest text-[color:var(--hud-cyan)] hover:underline cursor-pointer bg-transparent border-0 p-0 font-bold font-mono"
+            >
+              [{theme === "hud" ? "HUD" : "MINIMAL"}]
+            </button>
+          </div>
+          <div className="hud-label flex justify-between">
+            <span>LIGHT MODE</span>
+            <button
+              onClick={toggleLightMode}
+              className="text-[10px] uppercase tracking-widest text-[color:var(--hud-cyan)] hover:underline cursor-pointer bg-transparent border-0 p-0 font-bold font-mono"
+            >
+              [{lightMode ? "ON" : "OFF"}]
+            </button>
+          </div>
           <div className="hud-label flex justify-between">
             <span>STATUS</span>
             <span className="text-[color:var(--hud-green)] hud-text-glow">● ONLINE</span>

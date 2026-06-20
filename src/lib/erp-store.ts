@@ -1,5 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import {
+  fetchERPState,
+  mutateProduct,
+  mutateBom,
+  mutateSO,
+  mutatePO,
+  mutateMO,
+  resetERPData,
+  seedERPDemo
+} from "./erp-server";
 
 export type ID = string;
 export const uid = () => Math.random().toString(36).slice(2, 10);
@@ -84,39 +94,37 @@ interface ERPState {
   freeQty: (id: ID) => number;
 
   // mutations
-  upsertProduct: (p: Partial<Product> & { id?: ID }) => Product;
-  deleteProduct: (id: ID) => void;
+  initializeERPState: () => Promise<void>;
+  upsertProduct: (p: Partial<Product> & { id?: ID }) => Promise<Product>;
+  deleteProduct: (id: ID) => Promise<void>;
 
-  upsertBom: (b: Partial<Bom> & { id?: ID }) => Bom;
-  deleteBom: (id: ID) => void;
+  upsertBom: (b: Partial<Bom> & { id?: ID }) => Promise<Bom>;
+  deleteBom: (id: ID) => Promise<void>;
 
-  saveSO: (s: Partial<SalesOrder> & { id?: ID }) => SalesOrder;
-  confirmSO: (id: ID) => void;
-  deliverSO: (id: ID) => void;
-  cancelSO: (id: ID) => void;
+  saveSO: (s: Partial<SalesOrder> & { id?: ID }) => Promise<SalesOrder>;
+  confirmSO: (id: ID) => Promise<void>;
+  deliverSO: (id: ID) => Promise<void>;
+  cancelSO: (id: ID) => Promise<void>;
 
-  savePO: (p: Partial<PurchaseOrder> & { id?: ID }) => PurchaseOrder;
-  confirmPO: (id: ID) => void;
-  receivePO: (id: ID) => void;
-  cancelPO: (id: ID) => void;
+  savePO: (p: Partial<PurchaseOrder> & { id?: ID }) => Promise<PurchaseOrder>;
+  confirmPO: (id: ID) => Promise<void>;
+  receivePO: (id: ID) => Promise<void>;
+  cancelPO: (id: ID) => Promise<void>;
 
-  saveMO: (m: Partial<ManufacturingOrder> & { id?: ID }) => ManufacturingOrder;
-  confirmMO: (id: ID) => void;
-  startWO: (moId: ID, woId: ID) => void;
-  finishWO: (moId: ID, woId: ID) => void;
-  completeMO: (id: ID) => void;
-  cancelMO: (id: ID) => void;
+  saveMO: (m: Partial<ManufacturingOrder> & { id?: ID }) => Promise<ManufacturingOrder>;
+  confirmMO: (id: ID) => Promise<void>;
+  startWO: (moId: ID, woId: ID) => Promise<void>;
+  finishWO: (moId: ID, woId: ID) => Promise<void>;
+  completeMO: (id: ID) => Promise<void>;
+  cancelMO: (id: ID) => Promise<void>;
 
-  seedDemo: () => void;
-  reset: () => void;
+  seedDemo: () => Promise<void>;
+  reset: () => Promise<void>;
+  theme: "hud" | "minimal";
+  toggleTheme: () => void;
+  lightMode: boolean;
+  toggleLightMode: () => void;
 }
-
-const log = (state: ERPState, e: Omit<AuditEntry, "id" | "date">) => {
-  state.audit.unshift({ id: uid(), date: now(), ...e });
-};
-const move = (state: ERPState, m: Omit<StockMove, "id" | "date">) => {
-  state.stockMoves.unshift({ id: uid(), date: now(), ...m });
-};
 
 export const useERP = create<ERPState>()(
   persist(
@@ -135,345 +143,363 @@ export const useERP = create<ERPState>()(
         return p ? p.onHand - p.reserved : 0;
       },
 
-      upsertProduct: (p) => {
-        const existing = p.id ? get().products.find((x) => x.id === p.id) : undefined;
-        const next: Product = {
-          id: existing?.id ?? uid(),
-          name: p.name ?? existing?.name ?? "Unnamed",
-          salesPrice: Number(p.salesPrice ?? existing?.salesPrice ?? 0),
-          costPrice: Number(p.costPrice ?? existing?.costPrice ?? 0),
-          onHand: Number(p.onHand ?? existing?.onHand ?? 0),
-          reserved: Number(p.reserved ?? existing?.reserved ?? 0),
-          procureOnDemand: p.procureOnDemand ?? existing?.procureOnDemand ?? false,
-          procurementType: (p.procurementType ?? existing?.procurementType ?? "purchase") as ProcurementType,
-          vendor: p.vendor ?? existing?.vendor,
-          bomId: p.bomId ?? existing?.bomId,
-        };
-        set((s) => {
-          const products = existing
-            ? s.products.map((x) => (x.id === next.id ? next : x))
-            : [...s.products, next];
-          const audit = [...s.audit];
-          audit.unshift({ id: uid(), date: now(), module: "Product", action: existing ? "Updated" : "Created", ref: next.name });
-          return { products, audit };
-        });
-        return next;
+      initializeERPState: async () => {
+        try {
+          const data = await fetchERPState();
+          set(data);
+        } catch (err) {
+          console.error("Store initialization failed:", err);
+        }
       },
-      deleteProduct: (id) => set((s) => ({
-        products: s.products.filter((p) => p.id !== id),
-        audit: [{ id: uid(), date: now(), module: "Product", action: "Deleted", ref: id }, ...s.audit],
-      })),
 
-      upsertBom: (b) => {
-        const existing = b.id ? get().boms.find((x) => x.id === b.id) : undefined;
-        const next: Bom = {
-          id: existing?.id ?? uid(),
-          name: b.name ?? existing?.name ?? "BoM",
-          productId: b.productId ?? existing?.productId ?? "",
-          outputQty: Number(b.outputQty ?? existing?.outputQty ?? 1),
-          components: b.components ?? existing?.components ?? [],
-          operations: b.operations ?? existing?.operations ?? [],
+      upsertProduct: async (p) => {
+        const finalProduct: Product = {
+          id: p.id ?? uid(),
+          name: p.name ?? "Unnamed",
+          salesPrice: Number(p.salesPrice ?? 0),
+          costPrice: Number(p.costPrice ?? 0),
+          onHand: Number(p.onHand ?? 0),
+          reserved: Number(p.reserved ?? 0),
+          procureOnDemand: p.procureOnDemand ?? false,
+          procurementType: (p.procurementType ?? "purchase") as ProcurementType,
+          vendor: p.vendor,
+          bomId: p.bomId,
         };
-        set((s) => ({
-          boms: existing ? s.boms.map((x) => (x.id === next.id ? next : x)) : [...s.boms, next],
-          audit: [{ id: uid(), date: now(), module: "BoM", action: existing ? "Updated" : "Created", ref: next.name }, ...s.audit],
-        }));
-        return next;
-      },
-      deleteBom: (id) => set((s) => ({ boms: s.boms.filter((b) => b.id !== id) })),
 
-      saveSO: (s) => {
-        const existing = s.id ? get().sales.find((x) => x.id === s.id) : undefined;
-        const next: SalesOrder = {
-          id: existing?.id ?? uid(),
-          reference: existing?.reference ?? `SO-${String(get().sales.length + 1).padStart(4, "0")}`,
-          customer: s.customer ?? existing?.customer ?? "",
-          date: existing?.date ?? now(),
-          status: existing?.status ?? "draft",
-          lines: (s.lines ?? existing?.lines ?? []).map((l) => ({
+        try {
+          await mutateProduct({
+            data: {
+              action: "upsert",
+              id: finalProduct.id,
+              product: { ...finalProduct, isUpdate: !!p.id }
+            }
+          });
+          const data = await fetchERPState();
+          set(data);
+          return finalProduct;
+        } catch (err: any) {
+          console.error("Failed to upsert product:", err);
+          alert("Failed to save product: " + err.message);
+          throw err;
+        }
+      },
+
+      deleteProduct: async (id) => {
+        try {
+          await mutateProduct({ data: { action: "delete", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to delete product:", err);
+          alert("Failed to delete product: " + err.message);
+          throw err;
+        }
+      },
+
+      upsertBom: async (b) => {
+        const finalBom: Bom = {
+          id: b.id ?? uid(),
+          name: b.name ?? "BoM",
+          productId: b.productId ?? "",
+          outputQty: Number(b.outputQty ?? 1),
+          components: b.components ?? [],
+          operations: b.operations ?? [],
+        };
+
+        try {
+          await mutateBom({
+            data: {
+              action: "upsert",
+              id: finalBom.id,
+              bom: finalBom
+            }
+          });
+          const data = await fetchERPState();
+          set(data);
+          return finalBom;
+        } catch (err: any) {
+          console.error("Failed to upsert BoM:", err);
+          alert("Failed to save BoM: " + err.message);
+          throw err;
+        }
+      },
+
+      deleteBom: async (id) => {
+        try {
+          await mutateBom({ data: { action: "delete", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to delete BoM:", err);
+          alert("Failed to delete BoM: " + err.message);
+          throw err;
+        }
+      },
+
+      saveSO: async (s) => {
+        const finalSO: SalesOrder = {
+          id: s.id ?? "",
+          reference: s.reference ?? "",
+          customer: s.customer ?? "",
+          date: s.date ?? now(),
+          status: (s.status ?? "draft") as OrderStatus,
+          lines: (s.lines ?? []).map((l) => ({
             productId: l.productId,
             quantity: Number(l.quantity) || 0,
             delivered: Number(l.delivered) || 0,
             unitPrice: Number(l.unitPrice) || 0,
           })),
         };
-        set((st) => ({
-          sales: existing ? st.sales.map((x) => (x.id === next.id ? next : x)) : [next, ...st.sales],
-          audit: [{ id: uid(), date: now(), module: "Sales", action: existing ? "Updated" : "Created", ref: next.reference }, ...st.audit],
-        }));
-        return next;
-      },
-      confirmSO: (id) => set((st) => {
-        const so = st.sales.find((s) => s.id === id);
-        if (!so || so.status !== "draft") return st;
-        const products = st.products.map((p) => ({ ...p }));
-        const newPOs: PurchaseOrder[] = [];
-        const newMOs: ManufacturingOrder[] = [];
-        for (const line of so.lines) {
-          const p = products.find((x) => x.id === line.productId);
-          if (!p) continue;
-          const free = p.onHand - p.reserved;
-          const reserveQty = Math.min(free, line.quantity);
-          p.reserved += reserveQty;
-          const shortage = line.quantity - reserveQty;
-          if (shortage > 0 && p.procureOnDemand) {
-            if (p.procurementType === "purchase") {
-              newPOs.push({
-                id: uid(),
-                reference: `PO-${String(st.purchases.length + newPOs.length + 1).padStart(4, "0")}`,
-                vendor: p.vendor || "Auto Vendor",
-                date: now(),
-                status: "draft",
-                lines: [{ productId: p.id, quantity: shortage, received: 0, unitPrice: p.costPrice }],
-              });
-            } else {
-              newMOs.push({
-                id: uid(),
-                reference: `MO-${String(st.mos.length + newMOs.length + 1).padStart(4, "0")}`,
-                productId: p.id,
-                quantity: shortage,
-                bomId: p.bomId,
-                date: now(),
-                status: "draft",
-                workOrders: [],
-                consumedComponents: [],
-              });
-            }
-          }
-        }
-        const audit = [{ id: uid(), date: now(), module: "Sales", action: "Confirmed", ref: so.reference }, ...st.audit];
-        if (newPOs.length) audit.unshift({ id: uid(), date: now(), module: "Procurement", action: `Auto-created ${newPOs.length} PO`, ref: so.reference });
-        if (newMOs.length) audit.unshift({ id: uid(), date: now(), module: "Procurement", action: `Auto-created ${newMOs.length} MO`, ref: so.reference });
-        return {
-          products,
-          sales: st.sales.map((s) => (s.id === id ? { ...so, status: "confirmed" } : s)),
-          purchases: [...newPOs, ...st.purchases],
-          mos: [...newMOs, ...st.mos],
-          audit,
-        };
-      }),
-      deliverSO: (id) => set((st) => {
-        const so = st.sales.find((s) => s.id === id);
-        if (!so || so.status === "done" || so.status === "cancelled") return st;
-        const products = st.products.map((p) => ({ ...p }));
-        const moves: StockMove[] = [];
-        let allDone = true;
-        const newLines = so.lines.map((l) => {
-          const p = products.find((x) => x.id === l.productId);
-          if (!p) { allDone = false; return l; }
-          const deliverable = Math.min(l.quantity - l.delivered, p.onHand);
-          if (deliverable > 0) {
-            p.onHand -= deliverable;
-            p.reserved = Math.max(0, p.reserved - deliverable);
-            moves.push({ id: uid(), date: now(), productId: p.id, quantity: -deliverable, reason: "Sales delivery", ref: so.reference });
-          }
-          const delivered = l.delivered + deliverable;
-          if (delivered < l.quantity) allDone = false;
-          return { ...l, delivered };
-        });
-        const status: OrderStatus = allDone ? "done" : "partial";
-        return {
-          products,
-          sales: st.sales.map((s) => (s.id === id ? { ...so, lines: newLines, status } : s)),
-          stockMoves: [...moves, ...st.stockMoves],
-          audit: [{ id: uid(), date: now(), module: "Sales", action: allDone ? "Delivered" : "Partial delivery", ref: so.reference }, ...st.audit],
-        };
-      }),
-      cancelSO: (id) => set((st) => {
-        const so = st.sales.find((s) => s.id === id);
-        if (!so) return st;
-        const products = st.products.map((p) => ({ ...p }));
-        if (so.status === "confirmed" || so.status === "partial") {
-          for (const l of so.lines) {
-            const p = products.find((x) => x.id === l.productId);
-            if (p) p.reserved = Math.max(0, p.reserved - (l.quantity - l.delivered));
-          }
-        }
-        return {
-          products,
-          sales: st.sales.map((s) => (s.id === id ? { ...so, status: "cancelled" } : s)),
-          audit: [{ id: uid(), date: now(), module: "Sales", action: "Cancelled", ref: so.reference }, ...st.audit],
-        };
-      }),
 
-      savePO: (p) => {
-        const existing = p.id ? get().purchases.find((x) => x.id === p.id) : undefined;
-        const next: PurchaseOrder = {
-          id: existing?.id ?? uid(),
-          reference: existing?.reference ?? `PO-${String(get().purchases.length + 1).padStart(4, "0")}`,
-          vendor: p.vendor ?? existing?.vendor ?? "",
-          date: existing?.date ?? now(),
-          status: existing?.status ?? "draft",
-          lines: (p.lines ?? existing?.lines ?? []).map((l) => ({
+        try {
+          await mutateSO({
+            data: {
+              action: "save",
+              id: finalSO.id,
+              order: finalSO
+            }
+          });
+          const data = await fetchERPState();
+          set(data);
+          return finalSO;
+        } catch (err: any) {
+          console.error("Failed to save Sales Order:", err);
+          alert("Failed to save Sales Order: " + err.message);
+          throw err;
+        }
+      },
+
+      confirmSO: async (id) => {
+        try {
+          await mutateSO({ data: { action: "confirm", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to confirm Sales Order:", err);
+          alert("Failed to confirm Sales Order: " + err.message);
+          throw err;
+        }
+      },
+
+      deliverSO: async (id) => {
+        try {
+          await mutateSO({ data: { action: "deliver", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to deliver Sales Order:", err);
+          alert("Failed to deliver Sales Order: " + err.message);
+          throw err;
+        }
+      },
+
+      cancelSO: async (id) => {
+        try {
+          await mutateSO({ data: { action: "cancel", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to cancel Sales Order:", err);
+          alert("Failed to cancel Sales Order: " + err.message);
+          throw err;
+        }
+      },
+
+      savePO: async (p) => {
+        const finalPO: PurchaseOrder = {
+          id: p.id ?? "",
+          reference: p.reference ?? "",
+          vendor: p.vendor ?? "",
+          date: p.date ?? now(),
+          status: (p.status ?? "draft") as OrderStatus,
+          lines: (p.lines ?? []).map((l) => ({
             productId: l.productId,
             quantity: Number(l.quantity) || 0,
             received: Number(l.received) || 0,
             unitPrice: Number(l.unitPrice) || 0,
           })),
         };
-        set((st) => ({
-          purchases: existing ? st.purchases.map((x) => (x.id === next.id ? next : x)) : [next, ...st.purchases],
-          audit: [{ id: uid(), date: now(), module: "Purchase", action: existing ? "Updated" : "Created", ref: next.reference }, ...st.audit],
-        }));
-        return next;
-      },
-      confirmPO: (id) => set((st) => {
-        const po = st.purchases.find((p) => p.id === id);
-        if (!po || po.status !== "draft") return st;
-        return {
-          purchases: st.purchases.map((p) => (p.id === id ? { ...po, status: "confirmed" } : p)),
-          audit: [{ id: uid(), date: now(), module: "Purchase", action: "Confirmed", ref: po.reference }, ...st.audit],
-        };
-      }),
-      receivePO: (id) => set((st) => {
-        const po = st.purchases.find((p) => p.id === id);
-        if (!po || po.status === "done" || po.status === "cancelled") return st;
-        const products = st.products.map((p) => ({ ...p }));
-        const moves: StockMove[] = [];
-        const newLines = po.lines.map((l) => {
-          const remaining = l.quantity - l.received;
-          if (remaining <= 0) return l;
-          const p = products.find((x) => x.id === l.productId);
-          if (p) {
-            p.onHand += remaining;
-            moves.push({ id: uid(), date: now(), productId: p.id, quantity: remaining, reason: "Purchase receipt", ref: po.reference });
-          }
-          return { ...l, received: l.quantity };
-        });
-        return {
-          products,
-          purchases: st.purchases.map((p) => (p.id === id ? { ...po, lines: newLines, status: "done" } : p)),
-          stockMoves: [...moves, ...st.stockMoves],
-          audit: [{ id: uid(), date: now(), module: "Purchase", action: "Received", ref: po.reference }, ...st.audit],
-        };
-      }),
-      cancelPO: (id) => set((st) => ({
-        purchases: st.purchases.map((p) => (p.id === id ? { ...p, status: "cancelled" } : p)),
-        audit: [{ id: uid(), date: now(), module: "Purchase", action: "Cancelled", ref: id }, ...st.audit],
-      })),
 
-      saveMO: (m) => {
-        const existing = m.id ? get().mos.find((x) => x.id === m.id) : undefined;
-        const bom = (m.bomId ?? existing?.bomId) ? get().boms.find((b) => b.id === (m.bomId ?? existing?.bomId)) : undefined;
-        const qty = Number(m.quantity ?? existing?.quantity ?? 1);
-        const workOrders: WorkOrder[] = existing?.workOrders.length
-          ? existing.workOrders
-          : bom?.operations.map((op) => ({
-              id: uid(), name: op.name, workCenter: op.workCenter,
-              durationMin: op.durationMin * qty, status: "todo" as const,
-            })) ?? [];
-        const consumed: BomComponent[] = bom
-          ? bom.components.map((c) => ({ productId: c.productId, quantity: c.quantity * qty }))
-          : (existing?.consumedComponents ?? []);
-        const next: ManufacturingOrder = {
-          id: existing?.id ?? uid(),
-          reference: existing?.reference ?? `MO-${String(get().mos.length + 1).padStart(4, "0")}`,
-          productId: m.productId ?? existing?.productId ?? "",
-          quantity: qty,
-          bomId: m.bomId ?? existing?.bomId,
-          assignee: m.assignee ?? existing?.assignee,
-          date: existing?.date ?? now(),
-          status: existing?.status ?? "draft",
-          workOrders,
-          consumedComponents: consumed,
-        };
-        set((st) => ({
-          mos: existing ? st.mos.map((x) => (x.id === next.id ? next : x)) : [next, ...st.mos],
-          audit: [{ id: uid(), date: now(), module: "Manufacturing", action: existing ? "Updated" : "Created", ref: next.reference }, ...st.audit],
-        }));
-        return next;
+        try {
+          await mutatePO({
+            data: {
+              action: "save",
+              id: finalPO.id,
+              order: finalPO
+            }
+          });
+          const data = await fetchERPState();
+          set(data);
+          return finalPO;
+        } catch (err: any) {
+          console.error("Failed to save Purchase Order:", err);
+          alert("Failed to save Purchase Order: " + err.message);
+          throw err;
+        }
       },
-      confirmMO: (id) => set((st) => {
-        const mo = st.mos.find((m) => m.id === id);
-        if (!mo || mo.status !== "draft") return st;
-        const products = st.products.map((p) => ({ ...p }));
-        for (const c of mo.consumedComponents) {
-          const p = products.find((x) => x.id === c.productId);
-          if (p) p.reserved += c.quantity;
-        }
-        return {
-          products,
-          mos: st.mos.map((m) => (m.id === id ? { ...mo, status: "confirmed" } : m)),
-          audit: [{ id: uid(), date: now(), module: "Manufacturing", action: "Confirmed", ref: mo.reference }, ...st.audit],
-        };
-      }),
-      startWO: (moId, woId) => set((st) => ({
-        mos: st.mos.map((m) => m.id !== moId ? m : { ...m, workOrders: m.workOrders.map((w) => w.id === woId ? { ...w, status: "in_progress" } : w) }),
-      })),
-      finishWO: (moId, woId) => set((st) => ({
-        mos: st.mos.map((m) => m.id !== moId ? m : { ...m, workOrders: m.workOrders.map((w) => w.id === woId ? { ...w, status: "done" } : w) }),
-      })),
-      completeMO: (id) => set((st) => {
-        const mo = st.mos.find((m) => m.id === id);
-        if (!mo || mo.status === "done" || mo.status === "cancelled") return st;
-        const products = st.products.map((p) => ({ ...p }));
-        const moves: StockMove[] = [];
-        for (const c of mo.consumedComponents) {
-          const p = products.find((x) => x.id === c.productId);
-          if (p) {
-            p.onHand = Math.max(0, p.onHand - c.quantity);
-            p.reserved = Math.max(0, p.reserved - c.quantity);
-            moves.push({ id: uid(), date: now(), productId: p.id, quantity: -c.quantity, reason: "MO consumption", ref: mo.reference });
-          }
-        }
-        const fp = products.find((x) => x.id === mo.productId);
-        if (fp) {
-          fp.onHand += mo.quantity;
-          moves.push({ id: uid(), date: now(), productId: fp.id, quantity: mo.quantity, reason: "MO production", ref: mo.reference });
-        }
-        return {
-          products,
-          mos: st.mos.map((m) => m.id === id ? { ...mo, status: "done", workOrders: mo.workOrders.map((w) => ({ ...w, status: "done" as const })) } : m),
-          stockMoves: [...moves, ...st.stockMoves],
-          audit: [{ id: uid(), date: now(), module: "Manufacturing", action: "Completed", ref: mo.reference }, ...st.audit],
-        };
-      }),
-      cancelMO: (id) => set((st) => {
-        const mo = st.mos.find((m) => m.id === id);
-        if (!mo) return st;
-        const products = st.products.map((p) => ({ ...p }));
-        if (mo.status === "confirmed") {
-          for (const c of mo.consumedComponents) {
-            const p = products.find((x) => x.id === c.productId);
-            if (p) p.reserved = Math.max(0, p.reserved - c.quantity);
-          }
-        }
-        return {
-          products,
-          mos: st.mos.map((m) => m.id === id ? { ...mo, status: "cancelled" } : m),
-          audit: [{ id: uid(), date: now(), module: "Manufacturing", action: "Cancelled", ref: mo.reference }, ...st.audit],
-        };
-      }),
 
-      seedDemo: () => {
-        const legs: Product = { id: uid(), name: "Wooden Legs", salesPrice: 80, costPrice: 50, onHand: 200, reserved: 0, procureOnDemand: true, procurementType: "purchase", vendor: "TimberCo" };
-        const top: Product = { id: uid(), name: "Wooden Top", salesPrice: 600, costPrice: 400, onHand: 30, reserved: 0, procureOnDemand: true, procurementType: "purchase", vendor: "TimberCo" };
-        const screws: Product = { id: uid(), name: "Screws (pack)", salesPrice: 5, costPrice: 2, onHand: 1000, reserved: 0, procureOnDemand: true, procurementType: "purchase", vendor: "FastenerHub" };
-        const table: Product = { id: uid(), name: "Dining Table", salesPrice: 4500, costPrice: 2200, onHand: 5, reserved: 0, procureOnDemand: true, procurementType: "manufacturing" };
-        const chair: Product = { id: uid(), name: "Office Chair", salesPrice: 2200, costPrice: 1100, onHand: 12, reserved: 0, procureOnDemand: false, procurementType: "manufacturing" };
-        const bom: Bom = {
-          id: uid(), name: "Dining Table BoM", productId: table.id, outputQty: 1,
-          components: [
-            { productId: legs.id, quantity: 4 },
-            { productId: top.id, quantity: 1 },
-            { productId: screws.id, quantity: 12 },
-          ],
-          operations: [
-            { name: "Assembly", workCenter: "Assembly Line", durationMin: 60 },
-            { name: "Painting", workCenter: "Paint Floor", durationMin: 30 },
-            { name: "Packing", workCenter: "Packaging Unit", durationMin: 20 },
-          ],
-        };
-        table.bomId = bom.id;
-        set((s) => ({
-          ...s,
-          products: [legs, top, screws, table, chair],
-          boms: [bom],
-          audit: [{ id: uid(), date: now(), module: "System", action: "Demo data seeded" }, ...s.audit],
-        }));
+      confirmPO: async (id) => {
+        try {
+          await mutatePO({ data: { action: "confirm", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to confirm Purchase Order:", err);
+          alert("Failed to confirm Purchase Order: " + err.message);
+          throw err;
+        }
       },
-      reset: () => set({ products: [], boms: [], sales: [], purchases: [], mos: [], stockMoves: [], audit: [] }),
+
+      receivePO: async (id) => {
+        try {
+          await mutatePO({ data: { action: "receive", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to receive Purchase Order:", err);
+          alert("Failed to receive Purchase Order: " + err.message);
+          throw err;
+        }
+      },
+
+      cancelPO: async (id) => {
+        try {
+          await mutatePO({ data: { action: "cancel", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to cancel Purchase Order:", err);
+          alert("Failed to cancel Purchase Order: " + err.message);
+          throw err;
+        }
+      },
+
+      saveMO: async (m) => {
+        const finalMO: ManufacturingOrder = {
+          id: m.id ?? "",
+          reference: m.reference ?? "",
+          productId: m.productId ?? "",
+          quantity: Number(m.quantity ?? 1),
+          bomId: m.bomId,
+          assignee: m.assignee,
+          date: m.date ?? now(),
+          status: (m.status ?? "draft") as OrderStatus,
+          workOrders: m.workOrders ?? [],
+          consumedComponents: m.consumedComponents ?? [],
+        };
+
+        try {
+          await mutateMO({
+            data: {
+              action: "save",
+              id: finalMO.id,
+              order: finalMO
+            }
+          });
+          const data = await fetchERPState();
+          set(data);
+          return finalMO;
+        } catch (err: any) {
+          console.error("Failed to save Manufacturing Order:", err);
+          alert("Failed to save Manufacturing Order: " + err.message);
+          throw err;
+        }
+      },
+
+      confirmMO: async (id) => {
+        try {
+          await mutateMO({ data: { action: "confirm", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to confirm Manufacturing Order:", err);
+          alert("Failed to confirm Manufacturing Order: " + err.message);
+          throw err;
+        }
+      },
+
+      startWO: async (moId, woId) => {
+        try {
+          await mutateMO({ data: { action: "startWO", id: moId, woId } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to start Work Order:", err);
+          alert("Failed to start Work Order: " + err.message);
+          throw err;
+        }
+      },
+
+      finishWO: async (moId, woId) => {
+        try {
+          await mutateMO({ data: { action: "finishWO", id: moId, woId } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to finish Work Order:", err);
+          alert("Failed to finish Work Order: " + err.message);
+          throw err;
+        }
+      },
+
+      completeMO: async (id) => {
+        try {
+          await mutateMO({ data: { action: "complete", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to complete Manufacturing Order:", err);
+          alert("Failed to complete Manufacturing Order: " + err.message);
+          throw err;
+        }
+      },
+
+      cancelMO: async (id) => {
+        try {
+          await mutateMO({ data: { action: "cancel", id } });
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to cancel Manufacturing Order:", err);
+          alert("Failed to cancel Manufacturing Order: " + err.message);
+          throw err;
+        }
+      },
+
+      seedDemo: async () => {
+        try {
+          const data = await seedERPDemo();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to seed demo data:", err);
+          alert("Failed to seed demo data: " + err.message);
+          throw err;
+        }
+      },
+
+      reset: async () => {
+        try {
+          await resetERPData();
+          const data = await fetchERPState();
+          set(data);
+        } catch (err: any) {
+          console.error("Failed to reset ERP data:", err);
+          alert("Failed to reset ERP data: " + err.message);
+          throw err;
+        }
+      },
+
+      theme: "hud",
+      toggleTheme: () => set((s) => ({ theme: s.theme === "hud" ? "minimal" : "hud" })),
+      lightMode: false,
+      toggleLightMode: () => set((s) => ({ lightMode: !s.lightMode })),
     }),
-    { name: "shiv-erp-v1" }
+    {
+      name: "shiv-erp-v1",
+      partialize: (state) => ({
+        theme: state.theme,
+        lightMode: state.lightMode,
+      }),
+    }
   )
 );
